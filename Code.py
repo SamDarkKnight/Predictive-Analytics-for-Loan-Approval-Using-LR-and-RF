@@ -92,6 +92,23 @@ approval_prob = (
 
 df["Approval_Status"] = (approval_prob > 0.75).astype(int)
 
+labels = ['Approved', 'Rejected']
+counts = df['Approval_Status'].value_counts().values
+colors = ['#1D9E75', '#7F77DD']
+
+fig, ax = plt.subplots(figsize=(6, 4))
+bars = ax.bar(labels, counts, color=colors, width=0.5, edgecolor='white')
+for bar, count in zip(bars, counts):
+    ax.text(bar.get_x() + bar.get_width()/2,
+            bar.get_height() + 5, str(count),
+            ha='center', va='bottom', fontsize=11)
+ax.set_title('Loan approval class distribution', fontsize=13)
+ax.set_ylabel('Count')
+ax.spines[['top','right']].set_visible(False)
+plt.tight_layout()
+plt.savefig('class_distribution.png', dpi=150)
+plt.show()
+
 # ===============================
 # 7. Simulate Missing Values
 # ===============================
@@ -138,8 +155,6 @@ plt.figure(figsize=(8,6))
 sns.heatmap(df.corr(), annot=True)
 plt.title("Feature Correlation")
 plt.show()
-
-
 # ===============================
 # 12. Credit Score Binning
 # ===============================
@@ -151,6 +166,23 @@ df["Credit_Category"] = pd.cut(df["Credit_Score"], bins=bins, labels=labels)
 
 encoder = LabelEncoder()
 df["Credit_Category"] = encoder.fit_transform(df["Credit_Category"])
+
+fig, ax = plt.subplots(figsize=(8, 4))
+approved = df[df['Approval_Status'] == 1]['Credit_Score']
+rejected = df[df['Approval_Status'] == 0]['Credit_Score']
+
+sns.kdeplot(approved, ax=ax, fill=True, color='#1D9E75',
+            alpha=0.4, label=f'Approved (n={len(approved)})')
+sns.kdeplot(rejected, ax=ax, fill=True, color='#D85A30',
+            alpha=0.4, label=f'Rejected (n={len(rejected)})')
+ax.axvline(550, color='gray', linestyle='--', linewidth=1,
+           label='Risk threshold (550)')
+ax.set_title('Credit score distribution by approval status', fontsize=13)
+ax.set_xlabel('Credit score')
+ax.legend(); ax.spines[['top','right']].set_visible(False)
+plt.tight_layout()
+plt.savefig('credit_score_dist.png', dpi=150)
+plt.show()
 
 # ===============================
 # 13. Prepare Data for Model
@@ -233,3 +265,62 @@ print()
 print("Accuracy:", accuracy_score(y_test, y_pred_tuned))
 print(confusion_matrix(y_test, y_pred_tuned))
 print(classification_report(y_test, y_pred_tuned))
+
+# Model comparison chart (requires y_pred_tuned and best_model — placed here after both are defined)
+models = ['Logistic\nRegression', 'Random\nForest', 'Tuned LR\n(GridSearch)']
+accuracies = [
+    accuracy_score(y_test, y_pred),
+    accuracy_score(y_test, rf_pred),
+    accuracy_score(y_test, y_pred_tuned)
+]
+roc_aucs = [
+    roc_auc_score(y_test, model.predict_proba(X_test)[:,1]),
+    roc_auc_score(y_test, rf.predict_proba(X_test)[:,1]),
+    roc_auc_score(y_test, best_model.predict_proba(X_test)[:,1])
+]
+
+x = range(len(models))
+fig, ax = plt.subplots(figsize=(8, 4))
+b1 = ax.bar([i - 0.2 for i in x], accuracies, width=0.35,
+            label='Accuracy', color='#378ADD', edgecolor='white')
+b2 = ax.bar([i + 0.2 for i in x], roc_aucs, width=0.35,
+            label='ROC-AUC', color='#1D9E75', edgecolor='white')
+for bar in list(b1) + list(b2):
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.005,
+            f'{bar.get_height():.2f}', ha='center', va='bottom', fontsize=9)
+ax.set_xticks(list(x)); ax.set_xticklabels(models)
+ax.set_ylim(0, 1.1); ax.set_title('Model comparison', fontsize=13)
+ax.legend(); ax.spines[['top','right']].set_visible(False)
+plt.tight_layout()
+plt.savefig('model_comparison.png', dpi=150)
+plt.show()
+
+importance = pd.Series(best_model.coef_[0], index=X.columns)
+importance_sorted = importance.sort_values()
+colors = ['#D85A30' if v < 0 else '#1D9E75' for v in importance_sorted]
+
+fig, ax = plt.subplots(figsize=(8, 5))
+importance_sorted.plot(kind='barh', ax=ax, color=colors, edgecolor='white')
+ax.axvline(0, color='gray', linewidth=0.8, linestyle='--')
+ax.set_title('Logistic regression feature importance (coefficients)', fontsize=13)
+ax.set_xlabel('Coefficient value')
+ax.spines[['top','right']].set_visible(False)
+plt.tight_layout()
+plt.savefig('feature_importance.png', dpi=150)
+plt.show()
+
+cm = confusion_matrix(y_test, y_pred_tuned)
+labels_cm = ['Rejected', 'Approved']
+
+fig, ax = plt.subplots(figsize=(5, 4))
+sns.heatmap(
+    cm, annot=True, fmt='d', cmap='Blues',
+    xticklabels=labels_cm, yticklabels=labels_cm,
+    linewidths=1, linecolor='white', ax=ax, cbar=False
+)
+ax.set_xlabel('Predicted label')
+ax.set_ylabel('True label')
+ax.set_title('Confusion matrix — tuned logistic regression', fontsize=12)
+plt.tight_layout()
+plt.savefig('confusion_matrix.png', dpi=150)
+plt.show()
